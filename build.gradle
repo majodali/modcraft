@@ -1,0 +1,9 @@
+// Root build.gradle is intentionally minimal. Each subproject (shared/* and mods/*)
+// configures itself. Shared version pins live in gradle.properties and are
+// resolved per-subproject via project.minecraft_version etc.
+//
+// Useful root tasks:
+//   ./gradlew test                  -> runs tests in all subprojects with a test task
+//   ./gradlew build                 -> full build across all subprojects
+//   ./gradlew :mods:llmcraft:runClient      -> launch a specific mod's dev client
+//   ./gradlew :mods:llmcraft:runGametest    -> run a specific mod's in-world tests

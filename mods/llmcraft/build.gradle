@@ -1,0 +1,66 @@
+plugins {
+	id 'fabric-loom' version "${loom_version}"
+	id 'java'
+}
+
+version = project.mod_version
+group = 'com.majod.llmcraft'
+
+base {
+	archivesName = 'llmcraft'
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	// GameTest framework (transitively in fabric-api; declared for clarity).
+	modImplementation fabricApi.module("fabric-gametest-api-v1", project.fabric_api_version)
+
+	// Shared LLM library — plain Java, lives at :shared:llm-bridge.
+	// Dev runs pick it up via the classpath. When producing a release jar for
+	// players, add `include project(':shared:llm-bridge')` here to jar-in-jar it.
+	implementation project(':shared:llm-bridge')
+}
+
+loom {
+	runs {
+		gametest {
+			server()
+			name = "Game Test"
+			vmArg "-Dfabric-api.gametest"
+			vmArg "-Dfabric-api.gametest.report-file=${project.buildDir}/gametest-junit.xml"
+			runDir "build/gametest"
+		}
+	}
+}
+
+processResources {
+	inputs.property "version", project.version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": inputs.properties.version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+}
+
+java {
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+	withSourcesJar()
+}
+
+jar {
+	from(rootProject.file("LICENSE")) {
+		rename { "${it}_llmcraft" }
+	}
+}

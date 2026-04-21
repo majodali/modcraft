@@ -1,0 +1,52 @@
+// === Template for a new Fabric mod ============================================
+// To spin up a new mod from this template:
+//   1. Copy this whole folder:  cp -r mods/template mods/my-new-mod
+//   2. Rename the java package:  mv .../com/majod/template  .../com/majod/mynewmod
+//      (and update the `package ...;` line at the top of each .java file)
+//   3. Update the three IDs below (archivesName, group) + fabric.mod.json `id`
+//   4. Add the include to root settings.gradle:  include(':mods:my-new-mod')
+//   5. Run ./gradlew :mods:my-new-mod:runClient to verify
+// ==============================================================================
+
+plugins {
+	id 'fabric-loom' version "${loom_version}"
+	id 'java'
+}
+
+version = project.mod_version
+group = 'com.majod.template'
+
+base {
+	archivesName = 'template'
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	// Shared LLM library is pre-wired — delete these two lines if a new mod doesn't need LLM calls.
+	implementation project(':shared:llm-bridge')
+}
+
+processResources {
+	inputs.property "version", project.version
+	filesMatching("fabric.mod.json") {
+		expand "version": inputs.properties.version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+}
+
+java {
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+	withSourcesJar()
+}
