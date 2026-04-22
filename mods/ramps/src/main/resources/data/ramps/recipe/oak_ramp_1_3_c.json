@@ -1,0 +1,7 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "building",
+	"key": { "R": "ramps:oak_ramp_1_3_a" },
+	"pattern": [" RR", "RRR"],
+	"result": { "id": "ramps:oak_ramp_1_3_c", "count": 1 }
+}

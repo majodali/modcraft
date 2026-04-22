@@ -1,0 +1,4 @@
+{
+	"parent": "ramps:block/template_ramp_1_4_c",
+	"textures": { "all": "minecraft:block/cobblestone" }
+}

@@ -1,0 +1,20 @@
+{
+	"schemaVersion": 1,
+	"id": "ramps",
+	"version": "${version}",
+	"name": "Ramps",
+	"description": "Sloped wedge blocks at 1:2, 1:3, 1:4 grades. Combine with vanilla stairs for smooth transitions; rotate sideways to approximate curves.",
+	"authors": ["majod"],
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["com.majod.ramps.RampsMod"],
+		"fabric-gametest": ["com.majod.ramps.gametest.RampsGameTests"]
+	},
+	"depends": {
+		"fabricloader": ">=0.16.0",
+		"minecraft": "~1.21.4",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}

@@ -1,0 +1,7 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "building",
+	"key": { "R": "ramps:stone_ramp_1_4_a" },
+	"pattern": ["  R", "RRR", "RRR"],
+	"result": { "id": "ramps:stone_ramp_1_4_d", "count": 1 }
+}

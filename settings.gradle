@@ -17,4 +17,5 @@ include(':shared:llm-bridge')
 // Mods — each is an independent Fabric Loom subproject that can depend on shared libs.
 // Add new mods here after copying mods/template/ to the new directory.
 include(':mods:llmcraft')
+include(':mods:ramps')
 include(':mods:template')

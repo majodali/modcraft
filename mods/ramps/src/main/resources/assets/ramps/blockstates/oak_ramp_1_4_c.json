@@ -1,0 +1,8 @@
+{
+	"variants": {
+		"facing=north": { "model": "ramps:block/oak_ramp_1_4_c" },
+		"facing=east":  { "model": "ramps:block/oak_ramp_1_4_c", "y": 90 },
+		"facing=south": { "model": "ramps:block/oak_ramp_1_4_c", "y": 180 },
+		"facing=west":  { "model": "ramps:block/oak_ramp_1_4_c", "y": 270 }
+	}
+}

@@ -1,0 +1,8 @@
+{
+	"type": "minecraft:block",
+	"pools": [{
+		"rolls": 1.0, "bonus_rolls": 0.0,
+		"entries": [{ "type": "minecraft:item", "name": "ramps:oak_ramp_1_2_b" }],
+		"conditions": [{ "condition": "minecraft:survives_explosion" }]
+	}]
+}
