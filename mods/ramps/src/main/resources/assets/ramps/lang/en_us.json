@@ -1,4 +1,12 @@
 {
+	"itemGroup.ramps.ramps": "Ramps",
+
+	"item.ramps.ramp_wrench": "Ramp Wrench",
+
+	"block.ramps.oak_ramp_1_1_a": "Oak Ramp 1:1",
+	"block.ramps.stone_ramp_1_1_a": "Stone Ramp 1:1",
+	"block.ramps.cobblestone_ramp_1_1_a": "Cobblestone Ramp 1:1",
+
 	"block.ramps.oak_ramp_1_2_a": "Oak Ramp 1:2 (A)",
 	"block.ramps.oak_ramp_1_2_b": "Oak Ramp 1:2 (B)",
 	"block.ramps.oak_ramp_1_3_a": "Oak Ramp 1:3 (A)",

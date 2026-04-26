@@ -1,0 +1,7 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "building",
+	"key": { "P": "minecraft:cobblestone" },
+	"pattern": ["PP", "PP"],
+	"result": { "id": "ramps:cobblestone_ramp_1_1_a", "count": 4 }
+}

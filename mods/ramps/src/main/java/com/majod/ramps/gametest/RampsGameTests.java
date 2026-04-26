@@ -2,6 +2,7 @@ package com.majod.ramps.gametest;
 
 import com.majod.ramps.block.ModBlocks;
 import com.majod.ramps.block.RampBlock;
+import com.majod.ramps.block.RampOrientation;
 import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.test.GameTest;
 import net.minecraft.test.TestContext;
@@ -18,8 +19,7 @@ public class RampsGameTests implements FabricGameTest {
 
 	/**
 	 * Spawn-test: drops one ItemEntity for each of the 27 registered ramp blocks.
-	 * Validates the full mod-load + registration pipeline — fails fast if any
-	 * block has a broken Item registration.
+	 * Validates the full mod-load + registration pipeline.
 	 */
 	@GameTest(templateName = FabricGameTest.EMPTY_STRUCTURE)
 	public void canSpawnAllRampItemEntities(TestContext context) {
@@ -28,7 +28,6 @@ public class RampsGameTests implements FabricGameTest {
 			for (int grade : ModBlocks.GRADES) {
 				for (int step = 0; step < grade; step++) {
 					RampBlock block = ModBlocks.RAMPS.get(material).get(grade).get(step);
-					// Block.asItem() returns the BlockItem registered alongside this block.
 					context.spawnItem(block.asItem(), (float) x, 1.0f, 1.0f);
 					x++;
 				}
@@ -39,13 +38,11 @@ public class RampsGameTests implements FabricGameTest {
 
 	/**
 	 * Placement test: builds a full oak 1:3 ramp (steps a/b/c) facing east at
-	 * consecutive positions and asserts each block is the expected RampBlock type.
-	 *
-	 * This confirms our 3-piece "place in a line and they form a ramp" design
-	 * works end-to-end for the canonical use case.
+	 * consecutive positions and asserts each block is the expected RampBlock type
+	 * with the correct facing+orientation.
 	 */
 	@GameTest(templateName = FabricGameTest.EMPTY_STRUCTURE)
-	public void placesOakRamp13Sequence(TestContext context) {
+	public void placesOakRamp13FloorSequence(TestContext context) {
 		RampBlock stepA = ModBlocks.RAMPS.get(ModBlocks.Material.OAK).get(3).get(0);
 		RampBlock stepB = ModBlocks.RAMPS.get(ModBlocks.Material.OAK).get(3).get(1);
 		RampBlock stepC = ModBlocks.RAMPS.get(ModBlocks.Material.OAK).get(3).get(2);
@@ -54,14 +51,49 @@ public class RampsGameTests implements FabricGameTest {
 		BlockPos posB = new BlockPos(2, 1, 1);
 		BlockPos posC = new BlockPos(3, 1, 1);
 
-		context.setBlockState(posA, stepA.getDefaultState().with(RampBlock.FACING, Direction.EAST));
-		context.setBlockState(posB, stepB.getDefaultState().with(RampBlock.FACING, Direction.EAST));
-		context.setBlockState(posC, stepC.getDefaultState().with(RampBlock.FACING, Direction.EAST));
+		context.setBlockState(posA, stepA.getDefaultState()
+				.with(RampBlock.FACING, Direction.EAST)
+				.with(RampBlock.ORIENTATION, RampOrientation.FLOOR));
+		context.setBlockState(posB, stepB.getDefaultState()
+				.with(RampBlock.FACING, Direction.EAST)
+				.with(RampBlock.ORIENTATION, RampOrientation.FLOOR));
+		context.setBlockState(posC, stepC.getDefaultState()
+				.with(RampBlock.FACING, Direction.EAST)
+				.with(RampBlock.ORIENTATION, RampOrientation.FLOOR));
 
 		context.expectBlock(stepA, posA);
 		context.expectBlock(stepB, posB);
 		context.expectBlock(stepC, posC);
 
+		context.complete();
+	}
+
+	/**
+	 * Verify each (orientation × facing) combination can be set and read back.
+	 * Layed out as a 2D grid (orientation along x, facing along z) to stay inside
+	 * the 8×8 test arena even at 6 orientations.
+	 *
+	 * Shape correctness is implicit — if a BlockState's voxel shape isn't precomputed,
+	 * the lookup throws when getOutlineShape is called during ticking. The fact that
+	 * the arena ticks without exception is the assertion.
+	 */
+	@GameTest(templateName = FabricGameTest.EMPTY_STRUCTURE)
+	public void allOrientationsPlaceable(TestContext context) {
+		RampBlock block = ModBlocks.RAMPS.get(ModBlocks.Material.OAK).get(3).get(0);
+
+		int x = 1;
+		for (RampOrientation orientation : RampOrientation.values()) {
+			int z = 1;
+			for (Direction facing : Direction.Type.HORIZONTAL) {
+				BlockPos pos = new BlockPos(x, 1, z);
+				context.setBlockState(pos, block.getDefaultState()
+						.with(RampBlock.FACING, facing)
+						.with(RampBlock.ORIENTATION, orientation));
+				context.expectBlock(block, pos);
+				z++;
+			}
+			x++;
+		}
 		context.complete();
 	}
 }

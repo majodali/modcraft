@@ -1,19 +1,20 @@
 package com.majod.ramps.block;
 
 import com.majod.ramps.RampsMod;
-import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
+import com.majod.ramps.item.ModItems;
+import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
 import net.minecraft.block.AbstractBlock;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.Item;
-import net.minecraft.item.ItemConvertible;
-import net.minecraft.item.ItemGroups;
-import net.minecraft.item.Items;
+import net.minecraft.item.ItemGroup;
+import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
+import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
 import java.util.ArrayList;
@@ -25,51 +26,54 @@ import java.util.Map;
 public final class ModBlocks {
 	private ModBlocks() {}
 
-	/**
-	 * Materials we support. Each owns its texture, vanilla `Settings` source,
-	 * and the vanilla stair item it clusters after in the creative tab.
-	 */
+	/** Materials we support. Each owns its texture and vanilla `Settings` source. */
 	public enum Material {
-		OAK("oak", Blocks.OAK_PLANKS, () -> Items.OAK_STAIRS),
-		STONE("stone", Blocks.STONE, () -> Items.STONE_STAIRS),
-		COBBLESTONE("cobblestone", Blocks.COBBLESTONE, () -> Items.COBBLESTONE_STAIRS);
+		OAK("oak", Blocks.OAK_PLANKS),
+		STONE("stone", Blocks.STONE),
+		COBBLESTONE("cobblestone", Blocks.COBBLESTONE);
 
 		public final String name;
 		public final Block settingsSource;
-		private final java.util.function.Supplier<Item> creativeTabAnchor;
 
-		Material(String name, Block settingsSource, java.util.function.Supplier<Item> creativeTabAnchor) {
+		Material(String name, Block settingsSource) {
 			this.name = name;
 			this.settingsSource = settingsSource;
-			this.creativeTabAnchor = creativeTabAnchor;
 		}
-
-		public Item creativeTabAnchor() { return creativeTabAnchor.get(); }
 	}
+
+	/** Custom creative tab for all ramp blocks. */
+	public static final RegistryKey<ItemGroup> RAMPS_TAB_KEY =
+			RegistryKey.of(RegistryKeys.ITEM_GROUP, Identifier.of(RampsMod.MOD_ID, "ramps"));
 
 	/** Step letters: index 0 = "a", 1 = "b", 2 = "c", 3 = "d". */
 	public static final String[] STEP_LETTERS = {"a", "b", "c", "d"};
 
-	/** Grades to support. Each grade N has N step-pieces. */
-	public static final List<Integer> GRADES = List.of(2, 3, 4);
+	/** Grades to support. Each grade N has N step-pieces. Grade 1 is the steep ramp
+	 *  equivalent to vanilla stairs in slope (1 block climb in 1 horizontal block). */
+	public static final List<Integer> GRADES = List.of(1, 2, 3, 4);
 
 	/** Lookup: material → grade → step (0-indexed) → block. */
 	public static final Map<Material, Map<Integer, List<RampBlock>>> RAMPS = registerAll();
 
 	public static void register() {
-		ItemGroupEvents.modifyEntriesEvent(ItemGroups.BUILDING_BLOCKS).register(entries -> {
-			// Cluster each material's blocks after its vanilla stair, in
-			// (grade ascending, step ascending) order — so a 1:2 a/b come first,
-			// then 1:3 a/b/c, then 1:4 a/b/c/d.
-			for (Material material : Material.values()) {
-				List<ItemConvertible> rampsForMaterial = new ArrayList<>();
-				for (int grade : GRADES) {
-					rampsForMaterial.addAll(RAMPS.get(material).get(grade));
-				}
-				entries.addAfter(material.creativeTabAnchor(),
-						rampsForMaterial.toArray(new ItemConvertible[0]));
-			}
-		});
+		// Custom Ramps tab: Wrench first (it's the most-used item once you have ramps),
+		// then blocks in (material, grade, step) order.
+		ItemGroup rampsTab = FabricItemGroup.builder()
+				.icon(() -> new ItemStack(RAMPS.get(Material.OAK).get(3).get(0)))  // oak 1:3-a
+				.displayName(Text.translatable("itemGroup.ramps.ramps"))
+				.entries((displayContext, entries) -> {
+					entries.add(ModItems.RAMP_WRENCH);
+					for (Material material : Material.values()) {
+						for (int grade : GRADES) {
+							for (RampBlock block : RAMPS.get(material).get(grade)) {
+								entries.add(block);
+							}
+						}
+					}
+				})
+				.build();
+		Registry.register(Registries.ITEM_GROUP, RAMPS_TAB_KEY.getValue(), rampsTab);
+
 		int total = Material.values().length * GRADES.stream().mapToInt(Integer::intValue).sum();
 		RampsMod.LOGGER.info("Registered {} ramp blocks ({} materials × {} step-pieces across grades)",
 				total, Material.values().length, GRADES.stream().mapToInt(Integer::intValue).sum());

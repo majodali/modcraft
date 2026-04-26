@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Generates the highly-repetitive JSON files for mods/ramps:
-#   - 27 child block models (3 materials × 9 step-pieces across grades)
-#   - 27 blockstate files
+#   - 9 model templates per orientation (FLOOR + HORIZONTAL_LEFT + HORIZONTAL_RIGHT = 27 total)
+#     CEILING reuses FLOOR templates via blockstate JSON rotation; no separate templates.
+#   - Per (material × grade × step): child block models for each orientation that has its
+#     own template (FLOOR + HORIZONTAL_L + HORIZONTAL_R = 81 child models)
+#   - Per (material × grade × step): blockstate file with 16 variants (4 facings × 4 orientations)
 #   - 27 item asset files
 #   - 27 loot tables
-#   - 27 recipes (9 base planks→step-A + 18 upgrades step-A → step-B/C/D)
+#   - 27 recipes (9 base + 18 upgrade)
 #
 # Run from the repo root: bash scripts/gen_ramps.sh
-# Templates and Java are hand-maintained — this script only emits the boilerplate.
+# Java is hand-maintained — this script only emits JSON boilerplate.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,30 +32,298 @@ LETTERS=(a b c d)
 mkdir -p assets/ramps/models/block assets/ramps/blockstates assets/ramps/items \
          data/ramps/loot_table/blocks data/ramps/recipe
 
+# Format a number as up to 3 decimal places, dropping trailing zeros.
+num() {
+	awk -v n="$1" 'BEGIN {
+		s = sprintf("%.3f", n)
+		sub(/0+$/, "", s)
+		sub(/\.$/, "", s)
+		print s
+	}'
+}
+
 # -----------------------------------------------------------------------------
-# Per (material × grade × step): child model, blockstate, item asset, loot table
+# Templates
 # -----------------------------------------------------------------------------
+# All templates: 9 wedge slices stacking along z (slice i at z = [(7-i)*2, (8-i)*2]),
+# with optional support box for step > 0. Geometry differs per orientation:
+#
+#   FLOOR             — support box on bottom (y=[0, baseHeight]); slices stack in y.
+#                       Slice i top: y = baseHeight + wedge * (i+1) / 8.
+#                       Slice extent: x=[0,16], y=[0, sliceTop], z=slice_z.
+#
+#   HORIZONTAL_LEFT   — support wall on -x side (x=[0, baseDepth]); slices grow in +x.
+#                       Slice extent: x=[baseDepth, sliceDepth], y=[0,16], z=slice_z.
+#
+#   HORIZONTAL_RIGHT  — mirror of LEFT in x; support wall on +x side.
+#                       Slice extent: x=[16-sliceDepth, 16-baseDepth], y=[0,16], z=slice_z.
+#
+# CEILING reuses FLOOR templates via blockstate rotation (x=180 + adjusted y).
+
+SLICES=16  # must match RampBlock.SLICES
+
+# gen_floor_template <grade> <step>
+gen_floor_template() {
+	local grade=$1 step=$2
+	local letter="${LETTERS[$step]}"
+	local out="assets/ramps/models/block/template_ramp_1_${grade}_${letter}.json"
+
+	local base_h
+	base_h=$(awk -v g="$grade" -v s="$step" 'BEGIN { printf "%g", 16*s/g }')
+	local wedge_h
+	wedge_h=$(awk -v g="$grade" 'BEGIN { printf "%g", 16/g }')
+
+	{
+		echo '{'
+		echo '	"parent": "minecraft:block/block",'
+		echo '	"textures": { "particle": "#all" },'
+		echo '	"elements": ['
+
+		# Support box (step > 0): x=[0,16], y=[0,baseHeight], z=[0,16].
+		if [[ "$step" -gt 0 ]]; then
+			cat <<EOF
+		{ "from": [0, 0, 0], "to": [16, $(num "$base_h"), 16], "faces": {
+			"down":  { "texture": "#all", "cullface": "down" },
+			"up":    { "texture": "#all" },
+			"north": { "texture": "#all", "cullface": "north" },
+			"south": { "texture": "#all", "cullface": "south" },
+			"east":  { "texture": "#all", "cullface": "east" },
+			"west":  { "texture": "#all", "cullface": "west" }
+		}},
+EOF
+		fi
+
+		# SLICES wedge slices stacking in y, climbing toward -z.
+		local slice_px
+		slice_px=$(awk -v s="$SLICES" 'BEGIN { printf "%g", 16/s }')
+		for i in $(seq 0 $((SLICES - 1))); do
+			local z_high
+			z_high=$(awk -v s="$SLICES" -v i="$i" 'BEGIN { printf "%g", (s-i)*16/s }')
+			local z_low
+			z_low=$(awk -v s="$SLICES" -v i="$i" 'BEGIN { printf "%g", (s-i-1)*16/s }')
+			local slice_top
+			slice_top=$(awk -v b="$base_h" -v w="$wedge_h" -v i="$i" -v s="$SLICES" 'BEGIN { printf "%g", b + w*(i+1)/s }')
+
+			local cull_down
+			cull_down=$(if [[ "$step" -eq 0 ]]; then echo ', "cullface": "down"'; else echo ''; fi)
+			local cull_south
+			cull_south=$(if [[ "$i" -eq 0 ]]; then echo ', "cullface": "south"'; else echo ''; fi)
+			local cull_north
+			cull_north=$(if [[ "$i" -eq $((SLICES - 1)) ]]; then echo ', "cullface": "north"'; else echo ''; fi)
+			local trailing
+			trailing=$(if [[ "$i" -lt $((SLICES - 1)) ]]; then echo ','; else echo ''; fi)
+
+			cat <<EOF
+		{ "from": [0, $(num "$base_h"), $z_low], "to": [16, $(num "$slice_top"), $z_high], "faces": {
+			"down":  { "texture": "#all"${cull_down} },
+			"up":    { "texture": "#all" },
+			"north": { "texture": "#all"${cull_north} },
+			"south": { "texture": "#all"${cull_south} },
+			"east":  { "texture": "#all" },
+			"west":  { "texture": "#all" }
+		}}${trailing}
+EOF
+		done
+
+		echo '	]'
+		echo '}'
+	} > "$out"
+}
+
+# gen_horiz_template <grade> <step> <hand>   where hand = "left" or "right"
+gen_horiz_template() {
+	local grade=$1 step=$2 hand=$3
+	local letter="${LETTERS[$step]}"
+	local out="assets/ramps/models/block/template_ramp_1_${grade}_${letter}_horiz_${hand}.json"
+
+	local base_d
+	base_d=$(awk -v g="$grade" -v s="$step" 'BEGIN { printf "%g", 16*s/g }')
+	local wedge_d
+	wedge_d=$(awk -v g="$grade" 'BEGIN { printf "%g", 16/g }')
+	local base_d_inv
+	base_d_inv=$(awk -v b="$base_d" 'BEGIN { printf "%g", 16-b }')
+
+	{
+		echo '{'
+		echo '	"parent": "minecraft:block/block",'
+		echo '	"textures": { "particle": "#all" },'
+		echo '	"elements": ['
+
+		# Support wall (step > 0): full y, full z, x range depends on handedness.
+		# LEFT  → x=[0, baseDepth]      back wall on west
+		# RIGHT → x=[16-baseDepth, 16]  back wall on east
+		if [[ "$step" -gt 0 ]]; then
+			local sx_lo sx_hi cull_back cull_front
+			if [[ "$hand" == "left" ]]; then
+				sx_lo=0; sx_hi=$(num "$base_d")
+				cull_back='west'; cull_front='east'
+			else
+				sx_lo=$(num "$base_d_inv"); sx_hi=16
+				cull_back='east'; cull_front='west'
+			fi
+			cat <<EOF
+		{ "from": [${sx_lo}, 0, 0], "to": [${sx_hi}, 16, 16], "faces": {
+			"down":  { "texture": "#all", "cullface": "down" },
+			"up":    { "texture": "#all", "cullface": "up" },
+			"north": { "texture": "#all", "cullface": "north" },
+			"south": { "texture": "#all", "cullface": "south" },
+			"east":  { "texture": "#all" },
+			"west":  { "texture": "#all" }
+		}},
+EOF
+		fi
+
+		# SLICES wedge slices: full y, x extent grows along z (last slice at z=[0, slice_px] is thickest).
+		for i in $(seq 0 $((SLICES - 1))); do
+			local z_high
+			z_high=$(awk -v s="$SLICES" -v i="$i" 'BEGIN { printf "%g", (s-i)*16/s }')
+			local z_low
+			z_low=$(awk -v s="$SLICES" -v i="$i" 'BEGIN { printf "%g", (s-i-1)*16/s }')
+			local slice_d
+			slice_d=$(awk -v b="$base_d" -v w="$wedge_d" -v i="$i" -v s="$SLICES" 'BEGIN { printf "%g", b + w*(i+1)/s }')
+
+			# Slice x range
+			local sx_lo sx_hi
+			if [[ "$hand" == "left" ]]; then
+				sx_lo=$(num "$base_d"); sx_hi=$(num "$slice_d")
+			else
+				local slice_d_inv
+				slice_d_inv=$(awk -v sd="$slice_d" 'BEGIN { printf "%g", 16-sd }')
+				sx_lo=$(num "$slice_d_inv"); sx_hi=$(num "$base_d_inv")
+			fi
+
+			# Cullfaces for slice
+			local cull_up=', "cullface": "up"'
+			local cull_down=', "cullface": "down"'
+			local cull_south=''
+			if [[ "$i" -eq 0 ]]; then cull_south=', "cullface": "south"'; fi
+			local cull_north=''
+			if [[ "$i" -eq $((SLICES - 1)) ]]; then cull_north=', "cullface": "north"'; fi
+			local trailing=','
+			if [[ "$i" -eq $((SLICES - 1)) ]]; then trailing=''; fi
+
+			# Decide which slice face touches the back wall direction (and thus may need cullface)
+			local west_clause='"west":  { "texture": "#all" }'
+			local east_clause='"east":  { "texture": "#all" }'
+			if [[ "$hand" == "left" && "$step" -eq 0 ]]; then
+				west_clause='"west":  { "texture": "#all", "cullface": "west" }'
+			elif [[ "$hand" == "right" && "$step" -eq 0 ]]; then
+				east_clause='"east":  { "texture": "#all", "cullface": "east" }'
+			fi
+
+			cat <<EOF
+		{ "from": [${sx_lo}, 0, ${z_low}], "to": [${sx_hi}, 16, ${z_high}], "faces": {
+			"down":  { "texture": "#all"${cull_down} },
+			"up":    { "texture": "#all"${cull_up} },
+			"north": { "texture": "#all"${cull_north} },
+			"south": { "texture": "#all"${cull_south} },
+			${east_clause},
+			${west_clause}
+		}}${trailing}
+EOF
+		done
+
+		echo '	]'
+		echo '}'
+	} > "$out"
+}
+
+# Generate all templates (grade 1 = vanilla-stair-equivalent slope)
+for grade in 1 2 3 4; do
+	for step in $(seq 0 $((grade - 1))); do
+		gen_floor_template "$grade" "$step"
+		gen_horiz_template "$grade" "$step" left
+		gen_horiz_template "$grade" "$step" right
+	done
+done
+
+# -----------------------------------------------------------------------------
+# Per (material × grade × step): child models, blockstate, item asset, loot table
+# -----------------------------------------------------------------------------
+
+# CEILING and WALL reuse FLOOR's child model via blockstate rotation. The base
+# FLOOR_NORTH model has wedge climbing in +y with high end at -z. Each rotation
+# below transforms the wall/floor surface and FACING direction:
+#   FLOOR:  no x rotation; y rotates the high end direction
+#     NORTH=0, EAST=90, SOUTH=180, WEST=270
+#   CEILING: x=180 (flips upside-down + flips z, so high end now at +z); y rotates +z:
+#     NORTH = x180 + y180  (+z back to -z)
+#     EAST  = x180 + y270  (+z to +x — counter-clockwise from above)
+#     SOUTH = x180         (+z stays as +z)
+#     WEST  = x180 + y90   (+z to -x — clockwise from above)
+#   WALL_UP: x=270 (slice 7 thickest ends up at top y; wall surface at -z = north)
+#     y rotates wall from -z to FACING:
+#     NORTH = x270         (wall stays at -z)
+#     EAST  = x270 + y90   (wall at -z → +x)
+#     SOUTH = x270 + y180  (wall at -z → +z)
+#     WEST  = x270 + y270  (wall at -z → -x)
+#   WALL_DOWN: x=90 (slice 7 ends up at bottom y; wall surface at +z = south)
+#     y rotates wall from +z to FACING:
+#     NORTH = x90 + y180   (wall at +z → -z)
+#     EAST  = x90 + y270   (wall at +z → +x — counter-clockwise from above)
+#     SOUTH = x90          (wall stays at +z)
+#     WEST  = x90 + y90    (wall at +z → -x — clockwise from above)
+
 for material in oak stone cobblestone; do
 	texture="${TEX[$material]}"
-	for grade in 2 3 4; do
+	for grade in 1 2 3 4; do
 		for step in $(seq 0 $((grade - 1))); do
 			letter="${LETTERS[$step]}"
 			base="${material}_ramp_1_${grade}_${letter}"
 
+			# Child models: one per orientation that has a unique template
 			cat > "assets/ramps/models/block/${base}.json" <<EOF
 {
 	"parent": "ramps:block/template_ramp_1_${grade}_${letter}",
 	"textures": { "all": "${texture}" }
 }
 EOF
+			cat > "assets/ramps/models/block/${base}_horiz_left.json" <<EOF
+{
+	"parent": "ramps:block/template_ramp_1_${grade}_${letter}_horiz_left",
+	"textures": { "all": "${texture}" }
+}
+EOF
+			cat > "assets/ramps/models/block/${base}_horiz_right.json" <<EOF
+{
+	"parent": "ramps:block/template_ramp_1_${grade}_${letter}_horiz_right",
+	"textures": { "all": "${texture}" }
+}
+EOF
 
+			# Blockstate: 4 facings × 4 orientations = 16 variants
 			cat > "assets/ramps/blockstates/${base}.json" <<EOF
 {
 	"variants": {
-		"facing=north": { "model": "ramps:block/${base}" },
-		"facing=east":  { "model": "ramps:block/${base}", "y": 90 },
-		"facing=south": { "model": "ramps:block/${base}", "y": 180 },
-		"facing=west":  { "model": "ramps:block/${base}", "y": 270 }
+		"facing=north,orientation=floor":            { "model": "ramps:block/${base}" },
+		"facing=east,orientation=floor":             { "model": "ramps:block/${base}", "y": 90 },
+		"facing=south,orientation=floor":            { "model": "ramps:block/${base}", "y": 180 },
+		"facing=west,orientation=floor":             { "model": "ramps:block/${base}", "y": 270 },
+
+		"facing=north,orientation=ceiling":          { "model": "ramps:block/${base}", "x": 180, "y": 180 },
+		"facing=east,orientation=ceiling":           { "model": "ramps:block/${base}", "x": 180, "y": 270 },
+		"facing=south,orientation=ceiling":          { "model": "ramps:block/${base}", "x": 180 },
+		"facing=west,orientation=ceiling":           { "model": "ramps:block/${base}", "x": 180, "y": 90 },
+
+		"facing=north,orientation=wall_up":          { "model": "ramps:block/${base}", "x": 270 },
+		"facing=east,orientation=wall_up":           { "model": "ramps:block/${base}", "x": 270, "y": 90 },
+		"facing=south,orientation=wall_up":          { "model": "ramps:block/${base}", "x": 270, "y": 180 },
+		"facing=west,orientation=wall_up":           { "model": "ramps:block/${base}", "x": 270, "y": 270 },
+
+		"facing=north,orientation=wall_down":        { "model": "ramps:block/${base}", "x": 90, "y": 180 },
+		"facing=east,orientation=wall_down":         { "model": "ramps:block/${base}", "x": 90, "y": 270 },
+		"facing=south,orientation=wall_down":        { "model": "ramps:block/${base}", "x": 90 },
+		"facing=west,orientation=wall_down":         { "model": "ramps:block/${base}", "x": 90, "y": 90 },
+
+		"facing=north,orientation=horizontal_left":  { "model": "ramps:block/${base}_horiz_left" },
+		"facing=east,orientation=horizontal_left":   { "model": "ramps:block/${base}_horiz_left", "y": 90 },
+		"facing=south,orientation=horizontal_left":  { "model": "ramps:block/${base}_horiz_left", "y": 180 },
+		"facing=west,orientation=horizontal_left":   { "model": "ramps:block/${base}_horiz_left", "y": 270 },
+
+		"facing=north,orientation=horizontal_right": { "model": "ramps:block/${base}_horiz_right" },
+		"facing=east,orientation=horizontal_right":  { "model": "ramps:block/${base}_horiz_right", "y": 90 },
+		"facing=south,orientation=horizontal_right": { "model": "ramps:block/${base}_horiz_right", "y": 180 },
+		"facing=west,orientation=horizontal_right":  { "model": "ramps:block/${base}_horiz_right", "y": 270 }
 	}
 }
 EOF
@@ -81,12 +352,8 @@ EOF
 done
 
 # -----------------------------------------------------------------------------
-# Recipes
+# Recipes (unchanged from prior version)
 # -----------------------------------------------------------------------------
-# Base recipes (planks → step A): different shape per grade so they don't conflict
-#   1:2  __P/_PP/PPP   (6 planks → 4)
-#   1:3  _PP/PPP       (5 planks → 6)
-#   1:4  __P/PPP       (4 planks → 8)
 write_base_recipe() {
 	local material=$1 grade=$2 pattern_json=$3 yield=$4
 	local ingredient="${INGRED[$material]}"
@@ -101,11 +368,6 @@ write_base_recipe() {
 EOF
 }
 
-# Upgrade recipes (N step-A → 1 higher-step) — patterns are volumetric:
-#   __R/_RR     = 3 R    (step B for any grade)
-#   _RR/RRR     = 5 R    (step C for grades 3 and 4)
-#   __R/RRR/RRR = 7 R    (step D for grade 4)
-# Different ingredient (= step-A item of that grade) per recipe → no collisions.
 write_upgrade_recipe() {
 	local material=$1 grade=$2 target_step=$3 pattern_json=$4
 	local letter="${LETTERS[$target_step]}"
@@ -126,25 +388,58 @@ PATTERN_5R='[" RR", "RRR"]'
 PATTERN_7R='["  R", "RRR", "RRR"]'
 
 for material in oak stone cobblestone; do
-	# Base recipes (planks → step A)
+	# Base recipes (planks → step A); each grade gets a unique shape so MC's matcher
+	# doesn't mask any of them. Yield scales roughly with how many step pieces a
+	# full ramp needs (so one recipe makes ~2 full ramps' worth).
+	write_base_recipe "$material" 1 '["PP", "PP"]'          4
 	write_base_recipe "$material" 2 '["  P", " PP", "PPP"]' 4
 	write_base_recipe "$material" 3 '[" PP", "PPP"]'        6
 	write_base_recipe "$material" 4 '["  P", "PPP"]'        8
 
-	# 1:2 upgrades (1 total: a → b)
+	# Upgrade recipes (step-A → higher steps). Grade 1 has only one step → no upgrades.
 	write_upgrade_recipe "$material" 2 1 "$PATTERN_3R"
 
-	# 1:3 upgrades (2 total: a → b, a → c)
 	write_upgrade_recipe "$material" 3 1 "$PATTERN_3R"
 	write_upgrade_recipe "$material" 3 2 "$PATTERN_5R"
 
-	# 1:4 upgrades (3 total: a → b, a → c, a → d)
 	write_upgrade_recipe "$material" 4 1 "$PATTERN_3R"
 	write_upgrade_recipe "$material" 4 2 "$PATTERN_5R"
 	write_upgrade_recipe "$material" 4 3 "$PATTERN_7R"
 done
 
+# -----------------------------------------------------------------------------
+# Ramp Wrench: tool item for adjusting orientation/facing of placed ramps.
+# -----------------------------------------------------------------------------
+cat > "assets/ramps/items/ramp_wrench.json" <<'EOF'
+{
+	"model": {
+		"type": "minecraft:model",
+		"model": "minecraft:item/iron_ingot"
+	}
+}
+EOF
+
+# Recipe: 2 iron ingots stacked over a stick (mini-pickaxe shape, 2x3 = 3 cells).
+# Distinct from any block recipe → no conflicts.
+cat > "data/ramps/recipe/ramp_wrench.json" <<'EOF'
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "equipment",
+	"key": {
+		"I": "minecraft:iron_ingot",
+		"S": "minecraft:stick"
+	},
+	"pattern": [
+		"I",
+		"I",
+		"S"
+	],
+	"result": { "id": "ramps:ramp_wrench", "count": 1 }
+}
+EOF
+
 echo "Generated:"
+echo "  templates:     $(ls assets/ramps/models/block/ | grep '^template_' | wc -l)"
 echo "  child models:  $(ls assets/ramps/models/block/ | grep -v '^template_' | wc -l)"
 echo "  blockstates:   $(ls assets/ramps/blockstates/ | wc -l)"
 echo "  item assets:   $(ls assets/ramps/items/ | wc -l)"
