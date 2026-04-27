@@ -8,6 +8,7 @@ import com.majod.llmcraft.action.Action;
 import com.majod.llmcraft.action.ActionDispatcher;
 import com.majod.llmcraft.action.ActionResult;
 import com.majod.llmcraft.action.PlayerSessions;
+import com.majod.llmcraft.action.SessionLogger;
 import com.majod.llmcraft.action.Tools;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -68,17 +69,19 @@ public final class IterateCommand {
 		LlmCraftMod.llm()
 				.completeWithTools(conv, Tools.ALL)
 				.whenComplete((result, err) -> source.getServer().execute(
-						() -> handleResponse(player, world, conv, session, result, err)));
+						() -> handleResponse(player, world, conv, session, feedback, result, err)));
 		return 1;
 	}
 
 	private static void handleResponse(ServerPlayerEntity player, ServerWorld world,
 	                                    Conversation conv, PlayerSessions.Session session,
-	                                    CompletionResult result, Throwable err) {
+	                                    String feedback, CompletionResult result, Throwable err) {
 		if (err != null) {
 			LlmCraftMod.LOGGER.error("/iterate LLM call failed", err);
 			player.sendMessage(Text.literal("[/iterate] LLM error: " + err.getMessage())
 					.formatted(Formatting.RED), false);
+			SessionLogger.log(player.getServer(), player, "iterate", feedback, conv,
+					null, List.of(), 0, 0, err.toString());
 			return;
 		}
 		conv.appendAssistant(result.content());
@@ -86,6 +89,7 @@ public final class IterateCommand {
 		List<ContentBlock.ToolResult> toolResults = new ArrayList<>();
 		int actionsRun = 0;
 		int errors = 0;
+		int mutations = 0;
 		for (ContentBlock.ToolUse use : result.toolUses()) {
 			ActionResult ar;
 			try {
@@ -96,6 +100,9 @@ public final class IterateCommand {
 			}
 			actionsRun++;
 			if (ar.isError()) errors++;
+			if (("place_block".equals(use.name()) || "fill_region".equals(use.name())) && !ar.isError()) {
+				mutations++;
+			}
 			toolResults.add(new ContentBlock.ToolResult(use.id(), ar.content(), ar.isError()));
 		}
 		if (!toolResults.isEmpty()) {
@@ -108,7 +115,17 @@ public final class IterateCommand {
 		}
 		String summary = "[/iterate] ran " + actionsRun + " action" + (actionsRun == 1 ? "" : "s")
 				+ (errors > 0 ? " (" + errors + " errored)" : "")
-				+ (actionsRun > 0 ? ". /undo reverts the last." : ".");
+				+ (mutations > 0 ? ". /undo reverts the last." : ".");
 		player.sendMessage(Text.literal(summary).formatted(Formatting.GRAY), false);
+
+		if (actionsRun > 0 && mutations == 0) {
+			player.sendMessage(Text.literal(
+					"[/iterate] Note: no blocks were placed this turn. The model only "
+							+ "queried/chatted. Run /iterate again with a more directive instruction."
+					).formatted(Formatting.YELLOW), false);
+		}
+
+		SessionLogger.log(player.getServer(), player, "iterate", feedback, conv, result,
+				toolResults, actionsRun, errors, null);
 	}
 }

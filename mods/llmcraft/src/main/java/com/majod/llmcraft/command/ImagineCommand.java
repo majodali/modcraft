@@ -8,6 +8,7 @@ import com.majod.llmcraft.action.Action;
 import com.majod.llmcraft.action.ActionDispatcher;
 import com.majod.llmcraft.action.ActionResult;
 import com.majod.llmcraft.action.PlayerSessions;
+import com.majod.llmcraft.action.SessionLogger;
 import com.majod.llmcraft.action.Tools;
 import com.majod.llmcraft.action.WorldSnapshot;
 import com.mojang.brigadier.CommandDispatcher;
@@ -48,11 +49,19 @@ public final class ImagineCommand {
 			You are a creative builder embedded in a player's Minecraft world. The player has
 			invoked you with /imagine and a description of what they want.
 
-			You have tools to place blocks, fill cuboid regions, query existing blocks, and
-			chat with the player. Plan and execute a build that matches the description in a
-			single turn — emit all the tool calls needed at once, then a brief chat summary.
+			IMPORTANT — single-turn execution:
+			- This call ends after your response. Whatever tool calls you emit RIGHT NOW are
+			  the only thing the player will see. There is no follow-up turn unless the
+			  player runs /iterate.
+			- DO NOT call query_blocks first to "check the area" — the world snapshot below
+			  already shows what's nearby. Reading the snapshot IS your reconnaissance.
+			- If you only emit query_blocks or chat calls and no place_block / fill_region,
+			  the player sees nothing built and considers the call wasted. Always include
+			  at least one block-placing call.
+			- query_blocks is intended for /iterate refinement after the player gives you
+			  feedback like "the door's the wrong colour" — not for initial building.
 
-			Constraints:
+			Building guidance:
 			- Use absolute world coordinates (Y is up). The player's position and a snapshot
 			  of nearby blocks are provided below.
 			- Build NEAR the player — center your work within ~10 blocks of their position
@@ -90,16 +99,19 @@ public final class ImagineCommand {
 		LlmCraftMod.llm()
 				.completeWithTools(conv, Tools.ALL)
 				.whenComplete((result, err) -> source.getServer().execute(
-						() -> handleResponse(player, world, conv, result, err)));
+						() -> handleResponse(player, world, conv, description, result, err)));
 		return 1;
 	}
 
 	private static void handleResponse(ServerPlayerEntity player, ServerWorld world,
-	                                    Conversation conv, CompletionResult result, Throwable err) {
+	                                    Conversation conv, String userInput,
+	                                    CompletionResult result, Throwable err) {
 		if (err != null) {
 			LlmCraftMod.LOGGER.error("/imagine LLM call failed", err);
 			player.sendMessage(Text.literal("[/imagine] LLM error: " + err.getMessage())
 					.formatted(Formatting.RED), false);
+			SessionLogger.log(player.getServer(), player, "imagine", userInput, conv,
+					null, List.of(), 0, 0, err.toString());
 			return;
 		}
 
@@ -111,10 +123,12 @@ public final class ImagineCommand {
 		List<ContentBlock.ToolResult> toolResults = new ArrayList<>();
 		int actionsRun = 0;
 		int errors = 0;
+		int mutations = 0;  // place_block + fill_region calls only — what the player actually sees
 		for (ContentBlock.ToolUse use : result.toolUses()) {
 			ActionResult ar = dispatchSafely(use, world, player, session);
 			actionsRun++;
 			if (ar.isError()) errors++;
+			if (isMutating(use.name()) && !ar.isError()) mutations++;
 			toolResults.add(new ContentBlock.ToolResult(use.id(), ar.content(), ar.isError()));
 		}
 		if (!toolResults.isEmpty()) {
@@ -129,8 +143,24 @@ public final class ImagineCommand {
 		}
 		String summary = "[/imagine] ran " + actionsRun + " action" + (actionsRun == 1 ? "" : "s")
 				+ (errors > 0 ? " (" + errors + " errored)" : "")
-				+ (actionsRun > 0 ? ". /undo reverts the last." : ".");
+				+ (mutations > 0 ? ". /undo reverts the last." : ".");
 		player.sendMessage(Text.literal(summary).formatted(Formatting.GRAY), false);
+
+		// Hint when the LLM only inspected/chatted without building anything visible.
+		if (actionsRun > 0 && mutations == 0) {
+			player.sendMessage(Text.literal(
+					"[/imagine] Note: no blocks were placed this turn. The model only "
+							+ "queried/chatted. Run /iterate \"go ahead and build it\" to nudge it."
+					).formatted(Formatting.YELLOW), false);
+		}
+
+		SessionLogger.log(player.getServer(), player, "imagine", userInput, conv, result,
+				toolResults, actionsRun, errors, null);
+	}
+
+	/** Mutating actions are the ones the player can see in the world. */
+	private static boolean isMutating(String toolName) {
+		return "place_block".equals(toolName) || "fill_region".equals(toolName);
 	}
 
 	/** Centralised try/catch so a single bad action doesn't kill the whole batch. */
