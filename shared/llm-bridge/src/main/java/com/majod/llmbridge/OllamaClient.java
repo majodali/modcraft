@@ -3,6 +3,7 @@ package com.majod.llmbridge;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -41,5 +42,19 @@ public final class OllamaClient implements LlmClient {
 	static String extractText(String responseJson) {
 		JsonObject root = JsonParser.parseString(responseJson).getAsJsonObject();
 		return root.has("response") ? root.get("response").getAsString() : "";
+	}
+
+	/**
+	 * Tool use is not yet supported on Ollama. Most local models produce malformed JSON
+	 * when asked to use tools, and reliable structured output requires JSON-mode +
+	 * schema-aware re-prompting. Add when a feature genuinely needs Ollama tool support;
+	 * use {@link AnthropicClient} until then.
+	 */
+	@Override
+	public CompletableFuture<CompletionResult> completeWithTools(Conversation conversation, List<Tool> tools) {
+		CompletableFuture<CompletionResult> failed = new CompletableFuture<>();
+		failed.completeExceptionally(new UnsupportedOperationException(
+				"Ollama provider does not yet support tool use; switch to anthropic in the LLM config."));
+		return failed;
 	}
 }
