@@ -1,0 +1,33 @@
+{
+	"variants": {
+		"facing=north,orientation=floor":            { "model": "ramps:block/stone_ramp_1_6_d" },
+		"facing=east,orientation=floor":             { "model": "ramps:block/stone_ramp_1_6_d", "y": 90 },
+		"facing=south,orientation=floor":            { "model": "ramps:block/stone_ramp_1_6_d", "y": 180 },
+		"facing=west,orientation=floor":             { "model": "ramps:block/stone_ramp_1_6_d", "y": 270 },
+
+		"facing=north,orientation=ceiling":          { "model": "ramps:block/stone_ramp_1_6_d", "x": 180, "y": 180 },
+		"facing=east,orientation=ceiling":           { "model": "ramps:block/stone_ramp_1_6_d", "x": 180, "y": 270 },
+		"facing=south,orientation=ceiling":          { "model": "ramps:block/stone_ramp_1_6_d", "x": 180 },
+		"facing=west,orientation=ceiling":           { "model": "ramps:block/stone_ramp_1_6_d", "x": 180, "y": 90 },
+
+		"facing=north,orientation=wall_up":          { "model": "ramps:block/stone_ramp_1_6_d", "x": 270 },
+		"facing=east,orientation=wall_up":           { "model": "ramps:block/stone_ramp_1_6_d", "x": 270, "y": 90 },
+		"facing=south,orientation=wall_up":          { "model": "ramps:block/stone_ramp_1_6_d", "x": 270, "y": 180 },
+		"facing=west,orientation=wall_up":           { "model": "ramps:block/stone_ramp_1_6_d", "x": 270, "y": 270 },
+
+		"facing=north,orientation=wall_down":        { "model": "ramps:block/stone_ramp_1_6_d", "x": 90, "y": 180 },
+		"facing=east,orientation=wall_down":         { "model": "ramps:block/stone_ramp_1_6_d", "x": 90, "y": 270 },
+		"facing=south,orientation=wall_down":        { "model": "ramps:block/stone_ramp_1_6_d", "x": 90 },
+		"facing=west,orientation=wall_down":         { "model": "ramps:block/stone_ramp_1_6_d", "x": 90, "y": 90 },
+
+		"facing=north,orientation=horizontal_left":  { "model": "ramps:block/stone_ramp_1_6_d_horiz_left" },
+		"facing=east,orientation=horizontal_left":   { "model": "ramps:block/stone_ramp_1_6_d_horiz_left", "y": 90 },
+		"facing=south,orientation=horizontal_left":  { "model": "ramps:block/stone_ramp_1_6_d_horiz_left", "y": 180 },
+		"facing=west,orientation=horizontal_left":   { "model": "ramps:block/stone_ramp_1_6_d_horiz_left", "y": 270 },
+
+		"facing=north,orientation=horizontal_right": { "model": "ramps:block/stone_ramp_1_6_d_horiz_right" },
+		"facing=east,orientation=horizontal_right":  { "model": "ramps:block/stone_ramp_1_6_d_horiz_right", "y": 90 },
+		"facing=south,orientation=horizontal_right": { "model": "ramps:block/stone_ramp_1_6_d_horiz_right", "y": 180 },
+		"facing=west,orientation=horizontal_right":  { "model": "ramps:block/stone_ramp_1_6_d_horiz_right", "y": 270 }
+	}
+}

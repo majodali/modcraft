@@ -1,0 +1,4 @@
+{
+	"parent": "ramps:block/template_ramp_1_6_b",
+	"textures": { "all": "minecraft:block/oak_planks" }
+}

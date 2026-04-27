@@ -45,12 +45,13 @@ public final class ModBlocks {
 	public static final RegistryKey<ItemGroup> RAMPS_TAB_KEY =
 			RegistryKey.of(RegistryKeys.ITEM_GROUP, Identifier.of(RampsMod.MOD_ID, "ramps"));
 
-	/** Step letters: index 0 = "a", 1 = "b", 2 = "c", 3 = "d". */
-	public static final String[] STEP_LETTERS = {"a", "b", "c", "d"};
+	/** Step letters: index 0 = "a", 1 = "b", … 5 = "f". Sized for the largest grade. */
+	public static final String[] STEP_LETTERS = {"a", "b", "c", "d", "e", "f"};
 
 	/** Grades to support. Each grade N has N step-pieces. Grade 1 is the steep ramp
-	 *  equivalent to vanilla stairs in slope (1 block climb in 1 horizontal block). */
-	public static final List<Integer> GRADES = List.of(1, 2, 3, 4);
+	 *  equivalent to vanilla stairs in slope (1 block climb in 1 horizontal block).
+	 *  Grade 6 is the shallowest (1 block climb over 6 horizontal blocks). */
+	public static final List<Integer> GRADES = List.of(1, 2, 3, 4, 6);
 
 	/** Lookup: material → grade → step (0-indexed) → block. */
 	public static final Map<Material, Map<Integer, List<RampBlock>>> RAMPS = registerAll();

@@ -1,0 +1,10 @@
+{
+	"type": "minecraft:crafting_shapeless",
+	"category": "building",
+	"ingredients": [
+		"ramps:stone_ramp_1_6_e",
+		"ramps:stone_ramp_1_6_a",
+		"ramps:stone_ramp_1_6_a"
+	],
+	"result": { "id": "ramps:stone_ramp_1_6_f", "count": 1 }
+}

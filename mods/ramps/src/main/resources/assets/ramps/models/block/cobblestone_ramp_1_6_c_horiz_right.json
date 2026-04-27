@@ -1,0 +1,4 @@
+{
+	"parent": "ramps:block/template_ramp_1_6_c_horiz_right",
+	"textures": { "all": "minecraft:block/cobblestone" }
+}

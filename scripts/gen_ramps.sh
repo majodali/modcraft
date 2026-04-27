@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Generates the highly-repetitive JSON files for mods/ramps:
-#   - 9 model templates per orientation (FLOOR + HORIZONTAL_LEFT + HORIZONTAL_RIGHT = 27 total)
-#     CEILING reuses FLOOR templates via blockstate JSON rotation; no separate templates.
+# Generates the highly-repetitive JSON files for mods/ramps. Step counts depend on
+# the GRADES list — currently {1,2,3,4,6} → 1+2+3+4+6 = 16 step pieces per material.
+#   - 16 model templates per orientation (FLOOR + HORIZONTAL_LEFT + HORIZONTAL_RIGHT = 48 total)
+#     CEILING and WALL_UP/WALL_DOWN reuse FLOOR templates via blockstate JSON rotation.
 #   - Per (material × grade × step): child block models for each orientation that has its
-#     own template (FLOOR + HORIZONTAL_L + HORIZONTAL_R = 81 child models)
-#   - Per (material × grade × step): blockstate file with 16 variants (4 facings × 4 orientations)
-#   - 27 item asset files
-#   - 27 loot tables
-#   - 27 recipes (9 base + 18 upgrade)
+#     own template (FLOOR + HORIZONTAL_L + HORIZONTAL_R = 144 child models)
+#   - Per (material × grade × step): blockstate file with 24 variants (4 facings × 6 orientations)
+#   - 48 item asset files
+#   - 48 loot tables
+#   - Recipes: per material, 5 base recipes (one per grade) + 11 upgrade recipes = 16; ×3 materials = 48
 #
 # Run from the repo root: bash scripts/gen_ramps.sh
 # Java is hand-maintained — this script only emits JSON boilerplate.
@@ -27,7 +28,7 @@ declare -A INGRED=(
 	[stone]="minecraft:stone"
 	[cobblestone]="minecraft:cobblestone"
 )
-LETTERS=(a b c d)
+LETTERS=(a b c d e f)
 
 mkdir -p assets/ramps/models/block assets/ramps/blockstates assets/ramps/items \
          data/ramps/loot_table/blocks data/ramps/recipe
@@ -228,8 +229,8 @@ EOF
 	} > "$out"
 }
 
-# Generate all templates (grade 1 = vanilla-stair-equivalent slope)
-for grade in 1 2 3 4; do
+# Generate all templates (grade 1 = vanilla-stair-equivalent slope; grade 6 = shallow)
+for grade in 1 2 3 4 6; do
 	for step in $(seq 0 $((grade - 1))); do
 		gen_floor_template "$grade" "$step"
 		gen_horiz_template "$grade" "$step" left
@@ -266,7 +267,7 @@ done
 
 for material in oak stone cobblestone; do
 	texture="${TEX[$material]}"
-	for grade in 1 2 3 4; do
+	for grade in 1 2 3 4 6; do
 		for step in $(seq 0 $((grade - 1))); do
 			letter="${LETTERS[$step]}"
 			base="${material}_ramp_1_${grade}_${letter}"
@@ -386,6 +387,28 @@ EOF
 PATTERN_3R='["  R", " RR"]'
 PATTERN_5R='[" RR", "RRR"]'
 PATTERN_7R='["  R", "RRR", "RRR"]'
+PATTERN_9R='["RRR", "RRR", "RRR"]'
+
+# Shapeless recipe: 1 source-step + N filler-step (typically step-A) → 1 target-step.
+# Used for grade 6 step-F (which would need 11 step-A blocks via the standard upgrade
+# chain — too many for a 3×3 grid). Instead, craft step-F from 1 step-E + 2 step-A.
+write_shapeless_recipe() {
+	local material=$1 grade=$2 source_letter=$3 target_letter=$4 filler_count=$5
+	local fillers=""
+	for ((j=0; j<filler_count; j++)); do
+		fillers+=$',\n\t\t"ramps:'"${material}_ramp_1_${grade}_a"'"'
+	done
+	cat > "data/ramps/recipe/${material}_ramp_1_${grade}_${target_letter}_from_${source_letter}.json" <<EOF
+{
+	"type": "minecraft:crafting_shapeless",
+	"category": "building",
+	"ingredients": [
+		"ramps:${material}_ramp_1_${grade}_${source_letter}"${fillers}
+	],
+	"result": { "id": "ramps:${material}_ramp_1_${grade}_${target_letter}", "count": 1 }
+}
+EOF
+}
 
 for material in oak stone cobblestone; do
 	# Base recipes (planks → step A); each grade gets a unique shape so MC's matcher
@@ -395,6 +418,7 @@ for material in oak stone cobblestone; do
 	write_base_recipe "$material" 2 '["  P", " PP", "PPP"]' 4
 	write_base_recipe "$material" 3 '[" PP", "PPP"]'        6
 	write_base_recipe "$material" 4 '["  P", "PPP"]'        8
+	write_base_recipe "$material" 6 '["PPP", "PPP"]'        12
 
 	# Upgrade recipes (step-A → higher steps). Grade 1 has only one step → no upgrades.
 	write_upgrade_recipe "$material" 2 1 "$PATTERN_3R"
@@ -405,6 +429,16 @@ for material in oak stone cobblestone; do
 	write_upgrade_recipe "$material" 4 1 "$PATTERN_3R"
 	write_upgrade_recipe "$material" 4 2 "$PATTERN_5R"
 	write_upgrade_recipe "$material" 4 3 "$PATTERN_7R"
+
+	# 1:6 upgrade chain. Volumetric ratios (in wedge units): a=1, b=3, c=5, d=7, e=9, f=11.
+	# Steps b/c/d/e fit in the 3×3 grid as shaped recipes; step F needs 11 step-A which
+	# overflows, so f is crafted shapelessly from 1 step-E + 2 step-A (totaling 11 step-A
+	# worth of input).
+	write_upgrade_recipe   "$material" 6 1 "$PATTERN_3R"
+	write_upgrade_recipe   "$material" 6 2 "$PATTERN_5R"
+	write_upgrade_recipe   "$material" 6 3 "$PATTERN_7R"
+	write_upgrade_recipe   "$material" 6 4 "$PATTERN_9R"
+	write_shapeless_recipe "$material" 6 e f 2
 done
 
 # -----------------------------------------------------------------------------
