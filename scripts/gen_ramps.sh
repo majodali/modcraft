@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Generates the highly-repetitive JSON files for mods/ramps. Step counts depend on
-# the GRADES list — currently {1,2,3,4,6} → 1+2+3+4+6 = 16 step pieces per material.
-#   - 16 model templates per orientation (FLOOR + HORIZONTAL_LEFT + HORIZONTAL_RIGHT = 48 total)
+# Generates the highly-repetitive JSON files for mods/ramps.
+#
+# Ramps (step counts depend on the GRADES list — currently {1,2,3,4,6} → 16 step
+# pieces per material, ×3 materials = 48 ramp blocks):
+#   - 16 model templates per orientation (FLOOR + HORIZONTAL_LEFT + HORIZONTAL_RIGHT = 48 total).
 #     CEILING and WALL_UP/WALL_DOWN reuse FLOOR templates via blockstate JSON rotation.
 #   - Per (material × grade × step): child block models for each orientation that has its
 #     own template (FLOOR + HORIZONTAL_L + HORIZONTAL_R = 144 child models)
@@ -9,6 +11,14 @@
 #   - 48 item asset files
 #   - 48 loot tables
 #   - Recipes: per material, 5 base recipes (one per grade) + 11 upgrade recipes = 16; ×3 materials = 48
+#
+# Slabs (5 fractions × 3 materials = 15 slab blocks):
+#   - 5 templates (one per fraction, FLOOR variant; other orientations rotate via blockstate JSON)
+#   - 15 child block models
+#   - 15 blockstate files (6 variants each = 90 total variants)
+#   - 15 item asset files
+#   - 15 loot tables
+#   - 15 recipes
 #
 # Run from the repo root: bash scripts/gen_ramps.sh
 # Java is hand-maintained — this script only emits JSON boilerplate.
@@ -439,6 +449,142 @@ for material in oak stone cobblestone; do
 	write_upgrade_recipe   "$material" 6 3 "$PATTERN_7R"
 	write_upgrade_recipe   "$material" 6 4 "$PATTERN_9R"
 	write_shapeless_recipe "$material" 6 e f 2
+done
+
+# -----------------------------------------------------------------------------
+# Slabs — 5 fractions × 3 materials. Single template per fraction (FLOOR variant);
+# other 5 orientations are achieved via blockstate JSON x/y rotations.
+#
+# Rotation map (slab visible at the end position is shown after each):
+#   FLOOR        — no rotation              y∈[0,h]    (slab on cell floor)
+#   CEILING      — x=180                    y∈[1-h,1]  (slab on cell roof)
+#   WALL_NORTH   — x=270                    z∈[0,h]    (slab on -z wall)
+#   WALL_EAST    — x=270, y=90              x∈[1-h,1]  (slab on +x wall)
+#   WALL_SOUTH   — x=90                     z∈[1-h,1]  (slab on +z wall)
+#   WALL_WEST    — x=270, y=270             x∈[0,h]    (slab on -x wall)
+#
+# Recipe shapes (each fraction unique, no overlap with vanilla slab `["PPP"]` shape
+# nor any ramp recipe):
+#   1/4 — `["PP"]`              yield 8   (volumetric: 2 plank vol → 8 × 1/4 = 2 vol ✓)
+#   1/3 — `["P", "P"]`          yield 6   (2 vol → 6 × 1/3 = 2 vol ✓)
+#   1/2 — `[" P", "PP"]`        yield 6   (3 vol → 6 × 1/2 = 3 vol ✓)
+#   2/3 — `["PP", "P "]`        yield 4   (3 vol → 4 × 2/3 ≈ 2.67 vol; small player bonus)
+#   3/4 — `["P", "P", "P"]`     yield 4   (3 vol → 4 × 3/4 = 3 vol ✓)
+
+declare -A SLAB_HEIGHT=(
+	[1_4]="4"
+	[1_3]="5.33333"
+	[1_2]="8"
+	[2_3]="10.66667"
+	[3_4]="12"
+)
+SLAB_FRACTIONS=(1_4 1_3 1_2 2_3 3_4)
+
+declare -A SLAB_PATTERN=(
+	[1_4]='["PP"]'
+	[1_3]='["P", "P"]'
+	[1_2]='[" P", "PP"]'
+	[2_3]='["PP", "P "]'
+	[3_4]='["P", "P", "P"]'
+)
+declare -A SLAB_YIELD=(
+	[1_4]=8
+	[1_3]=6
+	[1_2]=6
+	[2_3]=4
+	[3_4]=4
+)
+
+# Per-fraction template (FLOOR variant): a single floor-hugging slab cuboid.
+gen_slab_template() {
+	local nd=$1
+	local h
+	h=$(num "${SLAB_HEIGHT[$nd]}")
+	local out="assets/ramps/models/block/template_slab_${nd}.json"
+	cat > "$out" <<EOF
+{
+	"parent": "minecraft:block/block",
+	"textures": { "particle": "#all" },
+	"elements": [
+		{ "from": [0, 0, 0], "to": [16, ${h}, 16], "faces": {
+			"down":  { "texture": "#all", "cullface": "down" },
+			"up":    { "texture": "#all" },
+			"north": { "texture": "#all", "cullface": "north" },
+			"south": { "texture": "#all", "cullface": "south" },
+			"east":  { "texture": "#all", "cullface": "east" },
+			"west":  { "texture": "#all", "cullface": "west" }
+		}}
+	]
+}
+EOF
+}
+
+for nd in "${SLAB_FRACTIONS[@]}"; do
+	gen_slab_template "$nd"
+done
+
+for material in oak stone cobblestone; do
+	texture="${TEX[$material]}"
+	ingredient="${INGRED[$material]}"
+	for nd in "${SLAB_FRACTIONS[@]}"; do
+		base="${material}_slab_${nd}"
+
+		# Child model: template + texture binding.
+		cat > "assets/ramps/models/block/${base}.json" <<EOF
+{
+	"parent": "ramps:block/template_slab_${nd}",
+	"textures": { "all": "${texture}" }
+}
+EOF
+
+		# Blockstate: 6 variants (one per orientation), all referencing the FLOOR
+		# child model with rotations baked in.
+		cat > "assets/ramps/blockstates/${base}.json" <<EOF
+{
+	"variants": {
+		"orientation=floor":      { "model": "ramps:block/${base}" },
+		"orientation=ceiling":    { "model": "ramps:block/${base}", "x": 180 },
+		"orientation=wall_north": { "model": "ramps:block/${base}", "x": 270 },
+		"orientation=wall_east":  { "model": "ramps:block/${base}", "x": 270, "y": 90 },
+		"orientation=wall_south": { "model": "ramps:block/${base}", "x": 90 },
+		"orientation=wall_west":  { "model": "ramps:block/${base}", "x": 270, "y": 270 }
+	}
+}
+EOF
+
+		# Item asset (1.21.2+ format).
+		cat > "assets/ramps/items/${base}.json" <<EOF
+{
+	"model": {
+		"type": "minecraft:model",
+		"model": "ramps:block/${base}"
+	}
+}
+EOF
+
+		# Loot table — drop self.
+		cat > "data/ramps/loot_table/blocks/${base}.json" <<EOF
+{
+	"type": "minecraft:block",
+	"pools": [{
+		"rolls": 1.0, "bonus_rolls": 0.0,
+		"entries": [{ "type": "minecraft:item", "name": "ramps:${base}" }],
+		"conditions": [{ "condition": "minecraft:survives_explosion" }]
+	}]
+}
+EOF
+
+		# Recipe.
+		cat > "data/ramps/recipe/${base}.json" <<EOF
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "building",
+	"key": { "P": "${ingredient}" },
+	"pattern": ${SLAB_PATTERN[$nd]},
+	"result": { "id": "ramps:${base}", "count": ${SLAB_YIELD[$nd]} }
+}
+EOF
+	done
 done
 
 # -----------------------------------------------------------------------------

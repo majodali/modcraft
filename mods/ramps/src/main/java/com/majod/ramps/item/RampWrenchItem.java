@@ -2,6 +2,8 @@ package com.majod.ramps.item;
 
 import com.majod.ramps.block.RampBlock;
 import com.majod.ramps.block.RampOrientation;
+import com.majod.ramps.block.SlabBlock;
+import com.majod.ramps.block.SlabOrientation;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
@@ -14,19 +16,21 @@ import net.minecraft.util.math.Direction;
 import net.minecraft.world.World;
 
 /**
- * Tool for adjusting placed ramp blocks in-place.
+ * Tool for adjusting placed ramp and slab blocks in-place.
  *
- *   Right-click on a ramp           → cycle ORIENTATION (6 options)
- *   Sneak + right-click on a ramp   → cycle FACING (4 options)
- *   Right-click on anything else    → no action (pass through)
+ * On a ramp:
+ *   Right-click           → cycle ORIENTATION (6 options) forward
+ *   Sneak + right-click   → cycle FACING (4 options) clockwise
+ *
+ * On a slab:
+ *   Right-click           → cycle ORIENTATION (6 options) forward
+ *   Sneak + right-click   → cycle ORIENTATION backward (slabs have no FACING)
+ *
+ * On anything else: pass through.
  *
  * Splitting orientation cycling out of the block's own onUse keeps regular
  * right-click free for direct ramp-on-ramp placement (no sneak required), and
  * avoids the "accidentally rotated my ramp" problem during normal play.
- *
- * Worst-case clicks to reach any of 24 placements:
- *   6 (orientation) + 3 (facing) = 9 total — including any sequencing.
- * Typical fix is 1–3 clicks.
  */
 public class RampWrenchItem extends Item {
 	public RampWrenchItem(Settings settings) {
@@ -39,22 +43,27 @@ public class RampWrenchItem extends Item {
 		BlockPos pos = context.getBlockPos();
 		BlockState state = world.getBlockState(pos);
 
-		if (!(state.getBlock() instanceof RampBlock)) {
+		PlayerEntity player = context.getPlayer();
+		boolean sneaking = player != null && player.isSneaking();
+
+		BlockState newState;
+		if (state.getBlock() instanceof RampBlock) {
+			newState = sneaking
+					? state.with(RampBlock.FACING, rotateClockwise(state.get(RampBlock.FACING)))
+					: state.with(RampBlock.ORIENTATION, nextRampOrientation(state.get(RampBlock.ORIENTATION)));
+		} else if (state.getBlock() instanceof SlabBlock) {
+			newState = state.with(SlabBlock.ORIENTATION,
+					cycleSlabOrientation(state.get(SlabBlock.ORIENTATION), sneaking));
+		} else {
 			return ActionResult.PASS;
 		}
+
 		if (world.isClient) {
 			return ActionResult.SUCCESS;
 		}
 
-		PlayerEntity player = context.getPlayer();
-		boolean sneaking = player != null && player.isSneaking();
-
-		BlockState newState = sneaking
-				? state.with(RampBlock.FACING, rotateClockwise(state.get(RampBlock.FACING)))
-				: state.with(RampBlock.ORIENTATION, nextOrientation(state.get(RampBlock.ORIENTATION)));
-
 		world.setBlockState(pos, newState);
-		// Distinct pitch for facing vs orientation cycles so the user can tell
+		// Distinct pitch for facing/reverse-cycle vs forward-cycle so the user can tell
 		// which dimension just changed without looking.
 		world.playSound(null, pos, SoundEvents.BLOCK_COMPARATOR_CLICK, SoundCategory.BLOCKS,
 				0.7f, sneaking ? 1.4f : 0.9f);
@@ -71,8 +80,15 @@ public class RampWrenchItem extends Item {
 		};
 	}
 
-	private static RampOrientation nextOrientation(RampOrientation current) {
+	private static RampOrientation nextRampOrientation(RampOrientation current) {
 		RampOrientation[] all = RampOrientation.values();
 		return all[(current.ordinal() + 1) % all.length];
+	}
+
+	private static SlabOrientation cycleSlabOrientation(SlabOrientation current, boolean reverse) {
+		SlabOrientation[] all = SlabOrientation.values();
+		int n = all.length;
+		int next = reverse ? (current.ordinal() - 1 + n) % n : (current.ordinal() + 1) % n;
+		return all[next];
 	}
 }

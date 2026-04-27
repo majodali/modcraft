@@ -1,0 +1,7 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "building",
+	"key": { "P": "minecraft:oak_planks" },
+	"pattern": ["PP", "P "],
+	"result": { "id": "ramps:oak_slab_2_3", "count": 4 }
+}

@@ -1,0 +1,10 @@
+{
+	"variants": {
+		"orientation=floor":      { "model": "ramps:block/stone_slab_3_4" },
+		"orientation=ceiling":    { "model": "ramps:block/stone_slab_3_4", "x": 180 },
+		"orientation=wall_north": { "model": "ramps:block/stone_slab_3_4", "x": 270 },
+		"orientation=wall_east":  { "model": "ramps:block/stone_slab_3_4", "x": 270, "y": 90 },
+		"orientation=wall_south": { "model": "ramps:block/stone_slab_3_4", "x": 90 },
+		"orientation=wall_west":  { "model": "ramps:block/stone_slab_3_4", "x": 270, "y": 270 }
+	}
+}

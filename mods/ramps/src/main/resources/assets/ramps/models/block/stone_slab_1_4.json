@@ -1,0 +1,4 @@
+{
+	"parent": "ramps:block/template_slab_1_4",
+	"textures": { "all": "minecraft:block/stone" }
+}

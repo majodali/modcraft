@@ -1,0 +1,10 @@
+{
+	"variants": {
+		"orientation=floor":      { "model": "ramps:block/cobblestone_slab_2_3" },
+		"orientation=ceiling":    { "model": "ramps:block/cobblestone_slab_2_3", "x": 180 },
+		"orientation=wall_north": { "model": "ramps:block/cobblestone_slab_2_3", "x": 270 },
+		"orientation=wall_east":  { "model": "ramps:block/cobblestone_slab_2_3", "x": 270, "y": 90 },
+		"orientation=wall_south": { "model": "ramps:block/cobblestone_slab_2_3", "x": 90 },
+		"orientation=wall_west":  { "model": "ramps:block/cobblestone_slab_2_3", "x": 270, "y": 270 }
+	}
+}

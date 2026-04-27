@@ -54,11 +54,15 @@ public final class ModBlocks {
 	public static final List<Integer> GRADES = List.of(1, 2, 3, 4, 6);
 
 	/** Lookup: material → grade → step (0-indexed) → block. */
-	public static final Map<Material, Map<Integer, List<RampBlock>>> RAMPS = registerAll();
+	public static final Map<Material, Map<Integer, List<RampBlock>>> RAMPS = registerAllRamps();
+
+	/** Lookup: material → fraction → block. */
+	public static final Map<Material, Map<SlabFraction, SlabBlock>> SLABS = registerAllSlabs();
 
 	public static void register() {
-		// Custom Ramps tab: Wrench first (it's the most-used item once you have ramps),
-		// then blocks in (material, grade, step) order.
+		// Custom Ramps tab: Wrench first (it's the most-used item once you have ramps and
+		// slabs), then ramps in (material, grade, step) order, then slabs in
+		// (material, fraction) order.
 		ItemGroup rampsTab = FabricItemGroup.builder()
 				.icon(() -> new ItemStack(RAMPS.get(Material.OAK).get(3).get(0)))  // oak 1:3-a
 				.displayName(Text.translatable("itemGroup.ramps.ramps"))
@@ -71,16 +75,22 @@ public final class ModBlocks {
 							}
 						}
 					}
+					for (Material material : Material.values()) {
+						for (SlabFraction fraction : SlabFraction.values()) {
+							entries.add(SLABS.get(material).get(fraction));
+						}
+					}
 				})
 				.build();
 		Registry.register(Registries.ITEM_GROUP, RAMPS_TAB_KEY.getValue(), rampsTab);
 
-		int total = Material.values().length * GRADES.stream().mapToInt(Integer::intValue).sum();
-		RampsMod.LOGGER.info("Registered {} ramp blocks ({} materials × {} step-pieces across grades)",
-				total, Material.values().length, GRADES.stream().mapToInt(Integer::intValue).sum());
+		int rampCount = Material.values().length * GRADES.stream().mapToInt(Integer::intValue).sum();
+		int slabCount = Material.values().length * SlabFraction.values().length;
+		RampsMod.LOGGER.info("Registered {} ramp blocks + {} slab blocks across {} materials",
+				rampCount, slabCount, Material.values().length);
 	}
 
-	private static Map<Material, Map<Integer, List<RampBlock>>> registerAll() {
+	private static Map<Material, Map<Integer, List<RampBlock>>> registerAllRamps() {
 		Map<Material, Map<Integer, List<RampBlock>>> out = new EnumMap<>(Material.class);
 		for (Material material : Material.values()) {
 			Map<Integer, List<RampBlock>> byGrade = new HashMap<>();
@@ -97,6 +107,19 @@ public final class ModBlocks {
 		return out;
 	}
 
+	private static Map<Material, Map<SlabFraction, SlabBlock>> registerAllSlabs() {
+		Map<Material, Map<SlabFraction, SlabBlock>> out = new EnumMap<>(Material.class);
+		for (Material material : Material.values()) {
+			Map<SlabFraction, SlabBlock> byFraction = new EnumMap<>(SlabFraction.class);
+			for (SlabFraction fraction : SlabFraction.values()) {
+				String name = material.name + "_slab_" + fraction.nd;
+				byFraction.put(fraction, registerSlab(name, fraction, material.settingsSource));
+			}
+			out.put(material, byFraction);
+		}
+		return out;
+	}
+
 	private static RampBlock registerRamp(String name, int grade, int step, Block settingsSource) {
 		Identifier id = Identifier.of(RampsMod.MOD_ID, name);
 		RegistryKey<Block> blockKey = RegistryKey.of(RegistryKeys.BLOCK, id);
@@ -104,6 +127,21 @@ public final class ModBlocks {
 
 		AbstractBlock.Settings settings = AbstractBlock.Settings.copy(settingsSource).registryKey(blockKey);
 		RampBlock block = new RampBlock(grade, step, settings);
+		Registry.register(Registries.BLOCK, blockKey, block);
+		Registry.register(Registries.ITEM, itemKey,
+				new BlockItem(block, new Item.Settings()
+						.registryKey(itemKey)
+						.useBlockPrefixedTranslationKey()));
+		return block;
+	}
+
+	private static SlabBlock registerSlab(String name, SlabFraction fraction, Block settingsSource) {
+		Identifier id = Identifier.of(RampsMod.MOD_ID, name);
+		RegistryKey<Block> blockKey = RegistryKey.of(RegistryKeys.BLOCK, id);
+		RegistryKey<Item> itemKey = RegistryKey.of(RegistryKeys.ITEM, id);
+
+		AbstractBlock.Settings settings = AbstractBlock.Settings.copy(settingsSource).registryKey(blockKey);
+		SlabBlock block = new SlabBlock(fraction, settings);
 		Registry.register(Registries.BLOCK, blockKey, block);
 		Registry.register(Registries.ITEM, itemKey,
 				new BlockItem(block, new Item.Settings()

@@ -3,6 +3,9 @@ package com.majod.ramps.gametest;
 import com.majod.ramps.block.ModBlocks;
 import com.majod.ramps.block.RampBlock;
 import com.majod.ramps.block.RampOrientation;
+import com.majod.ramps.block.SlabBlock;
+import com.majod.ramps.block.SlabFraction;
+import com.majod.ramps.block.SlabOrientation;
 import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.test.GameTest;
 import net.minecraft.test.TestContext;
@@ -18,7 +21,7 @@ import net.minecraft.util.math.Direction;
 public class RampsGameTests implements FabricGameTest {
 
 	/**
-	 * Spawn-test: drops one ItemEntity for each of the 27 registered ramp blocks.
+	 * Spawn-test: drops one ItemEntity for each registered ramp + slab block.
 	 * Validates the full mod-load + registration pipeline.
 	 */
 	@GameTest(templateName = FabricGameTest.EMPTY_STRUCTURE)
@@ -31,6 +34,13 @@ public class RampsGameTests implements FabricGameTest {
 					context.spawnItem(block.asItem(), (float) x, 1.0f, 1.0f);
 					x++;
 				}
+			}
+		}
+		for (ModBlocks.Material material : ModBlocks.Material.values()) {
+			for (SlabFraction fraction : SlabFraction.values()) {
+				SlabBlock block = ModBlocks.SLABS.get(material).get(fraction);
+				context.spawnItem(block.asItem(), (float) x, 1.0f, 1.0f);
+				x++;
 			}
 		}
 		context.complete();
@@ -89,6 +99,31 @@ public class RampsGameTests implements FabricGameTest {
 				context.setBlockState(pos, block.getDefaultState()
 						.with(RampBlock.FACING, facing)
 						.with(RampBlock.ORIENTATION, orientation));
+				context.expectBlock(block, pos);
+				z++;
+			}
+			x++;
+		}
+		context.complete();
+	}
+
+	/**
+	 * Verify each (slab fraction × orientation) combination can be set and read back.
+	 * Lays out fractions along x and orientations along z within the 8×8 arena.
+	 *
+	 * Shape correctness is implicit: if a state's voxel shape isn't precomputed for a
+	 * given orientation, the lookup throws when the arena ticks.
+	 */
+	@GameTest(templateName = FabricGameTest.EMPTY_STRUCTURE)
+	public void allSlabOrientationsPlaceable(TestContext context) {
+		int x = 1;
+		for (SlabFraction fraction : SlabFraction.values()) {
+			SlabBlock block = ModBlocks.SLABS.get(ModBlocks.Material.OAK).get(fraction);
+			int z = 1;
+			for (SlabOrientation orientation : SlabOrientation.values()) {
+				BlockPos pos = new BlockPos(x, 1, z);
+				context.setBlockState(pos, block.getDefaultState()
+						.with(SlabBlock.ORIENTATION, orientation));
 				context.expectBlock(block, pos);
 				z++;
 			}
